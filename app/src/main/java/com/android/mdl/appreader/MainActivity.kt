@@ -1,15 +1,12 @@
 package com.android.mdl.appreader
 
+import android.app.AlertDialog
 import android.os.Bundle
 import android.os.ResultReceiver
 import android.util.Log
 import android.widget.Button
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import com.google.android.gms.common.ConnectionResult
-import com.google.android.gms.common.GoogleApiAvailability
-import com.google.android.gms.common.api.ApiException
-import com.google.android.gms.common.api.CommonStatusCodes
 import com.google.android.gms.identitycredentials.CredentialOption
 import com.google.android.gms.identitycredentials.GetCredentialRequest
 import com.google.android.gms.identitycredentials.IdentityCredentialClient
@@ -34,7 +31,7 @@ import com.android.mdl.appreader.R
 class MainActivity : AppCompatActivity() {
     private lateinit var credentialClient: IdentityCredentialClient
     private val REQUEST_CODE_GET_CREDENTIAL = 777
-    private val serverDomain = "fido-kokukuma.jp.ngrok.io" // サーバードメインを設定してください
+    private val serverDomain = "fido-kokukuma.jp.ngrok.io"
     private var sessionID = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -53,46 +50,34 @@ class MainActivity : AppCompatActivity() {
         // クレデンシャル取得ボタンのクリックリスナー
         findViewById<Button>(R.id.btnGetCredential).setOnClickListener {
             lifecycleScope.launch{
-                getCredential()
+                getCredential("preview")
+            }
+        }
+        findViewById<Button>(R.id.btnGetCredentialOpenID4VP).setOnClickListener {
+            lifecycleScope.launch{
+                getCredential("openid4vp")
             }
         }
     }
 
-    private fun registerCredential() {
-        /*
-        val request = RegistrationRequest(
-            credentials = byteArrayOf(1, 2, 3, 4), // ダミーデータ。実際のアプリでは適切なデータを使用してください
-            matcher = byteArrayOf(5, 6, 7, 8), // ダミーデータ
-            type = "credential_type"
-        )
-        */
-        val request = RegistrationRequest(
-            credentials = byteArrayOf(1, 2, 3, 4), // ダミーデータ
-            matcher = byteArrayOf(5, 6, 7, 8), // ダミーデータ
-            type = "com.credman.IdentityCredential",
-            requestType = "storage", // または適切な文字列値
-            protocolTypes = listOf("protocol_type") // 適切なプロトコルタイプのリスト
-        )
-
-        credentialClient.registerCredentials(request)
-            .addOnSuccessListener { response: RegistrationResponse ->
-                Log.d("MainActivity", "Credential registered successfully")
-            }
-            .addOnFailureListener { e ->
-                Log.e("MainActivity", "Error registering credential", e)
-            }
+    private fun showResultInPopup(message: String) {
+        runOnUiThread {
+            AlertDialog.Builder(this)
+                .setTitle("結果")
+                .setMessage(message)
+                .setPositiveButton("OK", null)
+                .show()
+        }
     }
-
-    private suspend fun getCredential() {
-        //var credentialClient = IdentityCredentialManager.getClient(this)
-        val identityRequest = getIdentityRequestData(serverDomain)
+    private suspend fun getCredential(protocol: String) {
+        val identityRequest = getIdentityRequestData(serverDomain, protocol)
 
         sessionID = identityRequest.getString("session_id")
 
         val requestMatcher = JSONObject().apply {
             put("providers", JSONArray().put(
                 JSONObject().apply {
-                    put("protocol", "preview")
+                    put("protocol", protocol)
                     put("request", identityRequest.getString("data"))
                 }
             ))
@@ -123,14 +108,22 @@ class MainActivity : AppCompatActivity() {
 
                         CoroutineScope(Dispatchers.IO).launch {
                             try {
-                                val result = verifyIdentityData(serverDomain, responseJson, sessionID)
+                                val result = verifyIdentityData(serverDomain, responseJson, sessionID, protocol)
                                 Log.i("MainActivity", "Result JSON $result")
+                                withContext(Dispatchers.Main) {
+                                    showResultInPopup("Result JSON:\n$result")
+                                }
+
                             } catch (e: Exception) {
                                 Log.e("MainActivity", "Server access failed", e)
+                                withContext(Dispatchers.Main) {
+                                    showResultInPopup("エラー: サーバーアクセスに失敗しました\n${e.message}")
+                                }
                             }
                         }
                     } catch (e: GetCredentialException) {
                         Log.i("MainActivity", "An error occurred", e)
+                        showResultInPopup("エラーが発生しました:\n${e.message}")
                     }
 
                 }
@@ -155,11 +148,11 @@ class MainActivity : AppCompatActivity() {
 }
 
 
-suspend fun getIdentityRequestData(serverDomain: String): JSONObject {
+suspend fun getIdentityRequestData(serverDomain: String, protocol: String): JSONObject {
     return withContext(Dispatchers.IO) {
         val client = OkHttpClient()
 
-        val jsonBody = JSONObject().put("protocol", "preview").toString()
+        val jsonBody = JSONObject().put("protocol", protocol).toString()
         val body = jsonBody.toRequestBody("application/json".toMediaType())
 
         val request = Request.Builder()
@@ -176,13 +169,13 @@ suspend fun getIdentityRequestData(serverDomain: String): JSONObject {
     }
 }
 
-suspend fun verifyIdentityData(serverDomain: String, responseJson: String, sessionID: String): JSONObject {
+suspend fun verifyIdentityData(serverDomain: String, responseJson: String, sessionID: String, protocol: String): JSONObject {
     return withContext(Dispatchers.IO) {
         val client = OkHttpClient()
 
         val jsonBody = JSONObject()
             .put("session_id", sessionID)
-            .put("protocol", "preview")
+            .put("protocol", protocol)
             .put("data", responseJson)
             .toString()
         val body = jsonBody.toRequestBody("application/json".toMediaType())

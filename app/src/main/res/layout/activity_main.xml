@@ -28,6 +28,18 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/titleTextView"
+        app:layout_constraintBottom_toTopOf="@+id/btnGetCredentialOpenID4VP"
+        android:layout_marginTop="16dp" />
+
+    <Button
+        android:id="@+id/btnGetCredentialOpenID4VP"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Get Credential OpenID4VP"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/btnGetCredential"
+        app:layout_constraintBottom_toBottomOf="parent"
         android:layout_marginTop="16dp" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
